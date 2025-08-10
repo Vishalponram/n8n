@@ -1,0 +1,475 @@
+{
+  "name": "Exam Alert",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "2d4443ef-14ad-40c5-aca0-cc8cd7954e12",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer fc-fb255d8b310d4976874e7090d7991fea"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"url\": \"https://www.ibps.in/index.php/rural-bank-xiii/\",\n  \"formats\": [\n    \"markdown\"\n  ],\n  \"onlyMainContent\": true,\n  \"parsePDF\": true,\n  \"maxAge\": 14400000\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        208,
+        -176
+      ],
+      "id": "7157752e-041b-4b82-971a-ba47c64fe5db",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "mode": "markdownToHtml",
+        "markdown": "={{ $json.data.markdown }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.markdown",
+      "typeVersion": 1,
+      "position": [
+        416,
+        0
+      ],
+      "id": "de27b544-6b1f-4359-a7fb-d5c0dbf4f472",
+      "name": "Markdown"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "093b2e94-fa89-4d50-8836-a7961d95fe78",
+              "name": "Prompt",
+              "value": "=# SSC News Analysis Prompt\n\nYou are an expert analyst for Staff Selection Commission (SSC) notifications. Your task is to analyze scraped SSC website data and extract only relevant, current information for students preparing for SSC exams.\n\n## Input Data\nYou will receive raw HTML content from the SSC website. Your task is to:\n1. Parse and extract all relevant links and announcements from the HTML\n2. Identify dates, titles, and URLs from the content\n3. Structure the extracted information according to the specifications below\n\nThe HTML may contain various elements like `<a>` tags, `<p>` tags, tables, and other markup. Focus on extracting meaningful news items and notifications.\n\n## Analysis Instructions\n\n### 1. Relevance Filtering\n**INCLUDE only items that are:**\n- Published within the last 60 days\n- Related to SSC exams (CGL, CHSL, MTS, JE, etc.)\n- Important for exam candidates (dates, applications, results, etc.)\n\n**EXCLUDE items that are:**\n- Older than 60 days\n- Administrative/internal SSC matters\n- Non-exam related announcements\n- Duplicate or similar announcements\n\n### 2. Content Analysis\nFor each relevant item, extract and structure the following:\n\n### 3. Output Format\n\nReturn ONLY a valid JSON array. Each object must follow this exact structure:\n\n> **NOTE:** If the date is part of the anchor tag’s inner text (e.g., `\"07 Jun 2024 Notification for...\"`), extract the date from the beginning of the text. Dates should be in `\"DD MMM YYYY\"` format.  \n> If the date is not clearly separated, try to infer it from either the visible link text or surrounding text.\n\n```json\n{\n  \"title\": \"Clear, concise headline extracted from the notification (without the date prefix)\",\n  \"summary\": \"A helpful 2-sentence summary written specifically for SSC exam candidates. Focus on what students need to know and any action required.\",\n  \"category\": \"One of: 'Exam Date', 'Application Window', 'Admit Card', 'Result Declared', 'Syllabus Change', 'General Announcement'\",\n  \"is_major_announcement\": \"true or false (true for exam dates, results, major policy changes)\",\n  \"source_url\": \"The direct link provided in the input data\",\n  \"date\": \"DD MMM YYYY\"\n}\n",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        624,
+        0
+      ],
+      "id": "208aaa08-41ee-4451-bbf6-e2082ce22233",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.Prompt }} {{ $('Markdown').item.json.data }}",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        864,
+        0
+      ],
+      "id": "57357a17-f35d-47cc-8564-904e2d81cb16",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.0-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [
+        784,
+        160
+      ],
+      "id": "a67679aa-d9ed-4db1-837a-ec2e652d0510",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "hHWCBiEfaSaAgBl4",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let raw = $input.first().json.output;\n\n// Remove ```json backticks if present\nif (typeof raw === 'string') {\n  raw = raw.replace(/```json|```/g, '').trim();\n}\n\nlet data;\ntry {\n  data = JSON.parse(raw);\n} catch (err) {\n  throw new Error('Invalid JSON input: ' + err.message);\n}\n\n// Clean and pass through all entries\nconst results = data.map(entry => ({\n  title: entry.title,\n  summary: entry.summary,\n  category: entry.category,\n  is_major_announcement: String(entry.is_major_announcement),\n  source_url: entry.source_url,\n  date: entry.date\n}));\n\nreturn results.map(r => ({ json: r }));\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1216,
+        0
+      ],
+      "id": "c32f35f2-67d0-4edd-ba47-2b3870ca7c9a",
+      "name": "Code",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputData = $input.all();\nconst sheetData = inputData && inputData.length > 0\n  ? inputData.map(item => item.json)\n  : [];\n\n// Get code data (LLM output or scraped JSON from Code node)\nconst codeRaw = $(\"Code\").all();\nconst codeData = Array.isArray(codeRaw)\n  ? codeRaw.flatMap(item => Array.isArray(item.json) ? item.json : [item.json])\n  : [];\n\n// Only keep code entries that have a date\nconst validCodeData = codeData.filter(item => item.date);\n\n// Comparison function\nconst isSameEntry = (a, b) => {\n  return (\n    (!a.date || !b.date || a.date === b.date) &&\n    a.title === b.title &&\n    a.summary === b.summary &&\n    a.category === b.category &&\n    String(a.is_major_announcement) === String(b.is_major_announcement) &&\n    a.source_url === b.source_url\n  );\n};\n\n// If no sheet data, return all valid code entries\nif (sheetData.length === 0) {\n  return validCodeData.map(item => ({ json: item }));\n}\n\n// Otherwise, filter new/unique entries\nconst newEntries = validCodeData.filter(\n  codeItem => !sheetData.some(sheetItem => isSameEntry(sheetItem, codeItem))\n);\n\n// Return result\nreturn newEntries.map(item => ({ json: item }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        0
+      ],
+      "id": "be0cae2d-55db-4856-81a3-44445c4beb44",
+      "name": "Code1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1tkm6KmYPe5m4EwEDxXhbpYunfVfGNzU4nL6r0FQJ0uM",
+          "mode": "list",
+          "cachedResultName": "Intern (Testline)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1tkm6KmYPe5m4EwEDxXhbpYunfVfGNzU4nL6r0FQJ0uM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "ibps",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1tkm6KmYPe5m4EwEDxXhbpYunfVfGNzU4nL6r0FQJ0uM/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "summary": "={{ $json.summary }}",
+            "category": "={{ $json.category }}",
+            "is_major_announcement": "={{ $json.is_major_announcement }}",
+            "source_url": "={{ $json.source_url }}",
+            "date": "={{ $json.date }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "summary",
+              "displayName": "summary",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "category",
+              "displayName": "category",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "is_major_announcement",
+              "displayName": "is_major_announcement",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_url",
+              "displayName": "source_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "date",
+              "displayName": "date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1904,
+        0
+      ],
+      "id": "d6ffecc4-bdd1-4c52-9fb8-d426b619c1f2",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "LSv9nQleXFDZLgMV",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.firecrawl.dev/v1/scrape",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer fc-02e60b83415446dd8503076ee02e7601"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "{\n  \"url\": \"https://ssc.gov.in/\",\n  \"formats\": [\n    \"markdown\"\n  ],\n  \"onlyMainContent\": true,\n  \"parsePDF\": true,\n  \"maxAge\": 14400000\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        208,
+        160
+      ],
+      "id": "97fd4f1a-3e3a-4327-9ecb-d4858ece6079",
+      "name": "HTTP Request1",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://discord.com/api/webhooks/1401824073733898330/TH5aAlwL_Pjncy3gyUBS2bmLiLFdaLn_Qrjw4sBREXuoYqitQ4smHyNjkD-DG_TxBoFK",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"embeds\": [\n    {\n      \"title\": \"🔔 {{ $json.title }}\",\n      \"description\": \"{{ $json.summary }}\",\n      \"fields\": [\n        {\n          \"name\": \"Category\",\n          \"value\": \"{{ $json.category }}\"\n        },\n        {\n          \"name\": \"Major Announcement\",\n          \"value\": \"{{ $json.is_major_announcement }}\"\n        },\n        {\n          \"name\": \"Date\",\n          \"value\": \"{{ $json.date }}\"\n        }\n      ],\n      \"url\": \"{{ $json.source_url }}\",\n      \"color\": 5814783\n    }\n  ]\n}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2128,
+        0
+      ],
+      "id": "24615a7f-506f-41bb-aff7-9f04a704cce3",
+      "name": "HTTP Request2"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1tkm6KmYPe5m4EwEDxXhbpYunfVfGNzU4nL6r0FQJ0uM",
+          "mode": "list",
+          "cachedResultName": "Intern (Testline)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1tkm6KmYPe5m4EwEDxXhbpYunfVfGNzU4nL6r0FQJ0uM/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "ibps",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1tkm6KmYPe5m4EwEDxXhbpYunfVfGNzU4nL6r0FQJ0uM/edit#gid=0"
+        },
+        "options": {
+          "dataLocationOnSheet": {
+            "values": {
+              "rangeDefinition": "specifyRangeA1",
+              "range": "A:F"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.6,
+      "position": [
+        1424,
+        0
+      ],
+      "id": "f6564055-545b-4d59-8bfe-6231d0fafcce",
+      "name": "Get row(s) in sheet",
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "iZIDQ7VHSLyQ139a",
+          "name": "Google Sheets account 2"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "HTTP Request1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Markdown": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request1": {
+      "main": [
+        [
+          {
+            "node": "Markdown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Code1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "303ec833-d7e1-4912-ab40-62c04ba7ad6e",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "cab0ed09a13e8562a96858bbdba7064fa93b545146cb1b01c29e747adcf558ec"
+  },
+  "id": "8eIi9Fbz7yd325uE",
+  "tags": []
+}
