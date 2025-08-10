@@ -275,7 +275,7 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "https://discord.com/api/webhooks/1401824073733898330/TH5aAlwL_Pjncy3gyUBS2bmLiLFdaLn_Qrjw4sBREXuoYqitQ4smHyNjkD-DG_TxBoFK",
+        "url": "https://discord.com/api/webhooks/itQ4smHyNjkD-DG_TxBoFK",
         "sendBody": true,
         "specifyBody": "json",
         "jsonBody": "={\n  \"embeds\": [\n    {\n      \"title\": \"🔔 {{ $json.title }}\",\n      \"description\": \"{{ $json.summary }}\",\n      \"fields\": [\n        {\n          \"name\": \"Category\",\n          \"value\": \"{{ $json.category }}\"\n        },\n        {\n          \"name\": \"Major Announcement\",\n          \"value\": \"{{ $json.is_major_announcement }}\"\n        },\n        {\n          \"name\": \"Date\",\n          \"value\": \"{{ $json.date }}\"\n        }\n      ],\n      \"url\": \"{{ $json.source_url }}\",\n      \"color\": 5814783\n    }\n  ]\n}\n",
